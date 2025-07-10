@@ -16,10 +16,8 @@ except ImportError:
 import pandas as pd
 from werkzeug.utils import secure_filename
 
-# Load environment variables
 load_dotenv()
 
-# Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
 app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
@@ -27,7 +25,6 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 CORS(app)
 
-# MySQL connection setup
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
 MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
@@ -41,19 +38,15 @@ def get_db_connection():
         database=MYSQL_DB
     )
 
-# Google OAuth configuration
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
-# Admin emails (add your admin emails here or load from .env)
 ADMIN_EMAILS = set(os.getenv('ADMIN_EMAILS', '').split(',')) if os.getenv('ADMIN_EMAILS') else {"admin@example.com"}
 
-# Google Gemini configuration
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Initialize Gemini 2.5 Flash model
 try:
     model = genai.GenerativeModel('gemini-2.5-flash')
     print("Gemini 2.5 Flash model initialized successfully")
@@ -150,17 +143,16 @@ class ChatSession:
             }
         ]
         self.cart = []
-        self.language = 'en'  # Default language
+        self.language = 'en'  
         self.current_language = 'en'
         
-        # Initialize the chat model
         try:
             self.chat = model.start_chat(history=[])
             print(f"Created new chat session for user {user_id}")
         except Exception as e:
             print(f"Error initializing chat model: {str(e)}")
             self.chat = None
-        # Add system instruction as the first message
+
         self.chat.send_message(
             "You are a helpful grocery shopping assistant. "
             "Help users find products, manage their shopping cart, "
@@ -181,13 +173,10 @@ class ChatSession:
 
     async def get_ai_response(self, user_input):
         try:
-            # Add user message to chat history
             self.add_message('user', user_input)
             
-            # Get response from Gemini
             response = await self.chat.send_message_async(user_input)
             
-            # Add AI response to chat history
             bot_message = self.add_message('model', response.text)
             
             return bot_message
@@ -196,15 +185,14 @@ class ChatSession:
             error_message = f"Sorry, I encountered an error: {str(e)[:100]}"
             return self.add_message('model', error_message)
 
-# Routes
 @app.route('/')
 def index():
     if 'user' not in session:
         return redirect(url_for('login'))
-    # Toggle view mode for admin
+   
     view_mode = session.get('view_mode', 'admin' if session.get('is_admin') else 'user')
     if session.get('is_admin') and view_mode == 'admin':
-        # Get product_catalog columns
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SHOW COLUMNS FROM product_catalog")
@@ -212,7 +200,7 @@ def index():
         cursor.close()
         conn.close()
         return render_template('admin_dashboard.html', admin=session['user'], columns=columns, view_mode='admin')
-    # If admin and view_mode is user, or normal user
+
     return render_template('index.html', 
                          user=session['user'], 
                          supported_languages=SUPPORTED_LANGUAGES,
@@ -235,9 +223,8 @@ def login():
 
 @app.route('/auth/google')
 def google_auth():
-    # Get Google's OAuth 2.0 endpoints
     google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
-    # Create the authorization URL
+    
     auth_url = (
         f"{google_provider_cfg['authorization_endpoint']}?"
         f"client_id={GOOGLE_CLIENT_ID}&"
@@ -279,16 +266,16 @@ def google_auth_callback():
         if userinfo_response.status_code != 200:
             return f"Error getting user info: {userinfo_response.text}", 400
         userinfo = userinfo_response.json()
-        # Store user in session
+        
         session['user'] = {
             'id': userinfo['sub'],
             'name': userinfo.get('name', 'User'),
             'email': userinfo.get('email', ''),
             'picture': userinfo.get('picture', '')
         }
-        # Set admin flag if email is in ADMIN_EMAILS only
+        
         session['is_admin'] = userinfo.get('email') in ADMIN_EMAILS
-        # Initialize chat session for user
+    
         if userinfo['sub'] not in chat_sessions:
             chat_sessions[userinfo['sub']] = ChatSession(userinfo['sub'])
         return redirect(url_for('index'))
@@ -319,7 +306,6 @@ def chat():
     chat_session = chat_sessions[user_id]
     
     try:
-        # Add user message to chat history
         user_message = {
             'role': 'user',
             'text': message,
@@ -327,10 +313,8 @@ def chat():
         }
         chat_session.messages.append(user_message)
 
-        # Get current language
         current_language = session.get('current_language', 'en')
 
-        # Check for add product intent (e.g., "add product: name=..., description=..., ...")
         add_product_pattern = r"add product\s*:\s*name=(.*?),\s*description=(.*?),\s*category=(.*?),\s*price=([\d.]+),\s*stock=(\d+),\s*is_active=(\d)"
         match = re.search(add_product_pattern, message, re.IGNORECASE)
         if match:
@@ -356,7 +340,7 @@ def chat():
                 response_text = f"Product '{name}' added successfully to the catalog."
             except Exception as db_err:
                 response_text = f"Failed to add product: {db_err}"
-        # Check for product show intent
+       
         elif re.search(r"\b(product show|show products|list products|display products)\b", message, re.IGNORECASE):
             try:
                 conn = get_db_connection()
@@ -391,18 +375,17 @@ def chat():
                 response_text = f"Added product {product_id} (qty: {quantity}) to your cart."
             except Exception as db_err:
                 response_text = f"Failed to add to cart: {db_err}"
-        # Place order intent
+        
         elif re.search(r"place order", message, re.IGNORECASE):
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                # Get all cart items for user
                 cursor.execute("SELECT product_id, quantity FROM cart WHERE user_id=%s", (user_id,))
                 cart_items = cursor.fetchall()
                 if not cart_items:
                     response_text = "Your cart is empty. Add products before placing an order."
                 else:
-                    # Reduce stock for each product
+                    
                     for item in cart_items:
                         cursor.execute(
                             "UPDATE product_catalog SET stock = stock - %s WHERE id = %s AND stock >= %s",
@@ -410,14 +393,14 @@ def chat():
                         )
                         if cursor.rowcount == 0:
                             raise Exception(f"Insufficient stock for product_id={item[0]}")
-                    # Format order details
+                  
                     order_details = ", ".join([f"product_id={item[0]}, quantity={item[1]}" for item in cart_items])
-                    # Insert into orders table
+                   
                     cursor.execute(
                         "INSERT INTO orders (user_id, order_details) VALUES (%s, %s)",
                         (user_id, order_details)
                     )
-                    # Clear cart
+                    
                     cursor.execute("DELETE FROM cart WHERE user_id=%s", (user_id,))
                     conn.commit()
                     response_text = "Order placed successfully! Your cart is now empty."
@@ -426,7 +409,6 @@ def chat():
             except Exception as db_err:
                 response_text = f"Failed to place order: {db_err}"
         else:
-            # Get response from Gemini
             response_text = ""
             try:
                 response = chat_session.chat.send_message(message)
@@ -434,7 +416,6 @@ def chat():
             except Exception as e:
                 response_text = "I'm having trouble connecting to the AI service right now. Please try again later."
 
-        # Translate response if needed
         if current_language != 'en' and translator:
             try:
                 translated = translator.translate(response_text, dest=current_language)
@@ -442,7 +423,6 @@ def chat():
             except Exception as trans_err:
                 response_text += f"\n(Translation error: {trans_err})"
 
-        # Add bot response to chat history
         bot_message = {
             'role': 'assistant',
             'text': response_text,
@@ -451,11 +431,9 @@ def chat():
         chat_session.messages.append(bot_message)
         print(f"Added bot response to history. Total messages: {len(chat_session.messages)}")
 
-        # Keep only the last 20 messages to prevent context window issues
         if len(chat_session.messages) > 20:
             chat_session.messages = chat_session.messages[-20:]
 
-        # Format response to match frontend expectations
         response_data = {
             'message': {
                 'role': 'assistant',
@@ -472,8 +450,6 @@ def chat():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
-# (Removed separate admin login and dashboard routes)
 
 @app.route('/api/chat/history', methods=['GET'])
 def get_chat_history():
@@ -512,16 +488,12 @@ def admin_upload_excel():
         return jsonify({'error': 'Only .xlsx files are supported'}), 400
     try:
         df = pd.read_excel(file)
-        # Get columns from DB
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SHOW COLUMNS FROM product_catalog")
         db_columns = [col[0] for col in cursor.fetchall()]
-        # Only keep columns that exist in DB
         df = df[[col for col in df.columns if col in db_columns]]
-        # Delete all rows
         cursor.execute("DELETE FROM product_catalog")
-        # Insert new rows
         for _, row in df.iterrows():
             placeholders = ','.join(['%s'] * len(row))
             sql = f"INSERT INTO product_catalog ({','.join(row.index)}) VALUES ({placeholders})"
