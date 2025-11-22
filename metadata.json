@@ -1,0 +1,6 @@
+{
+  "name": "Personal Grocery Chatbot",
+  "description": "A friendly AI chatbot to help you manage your grocery lists, discover recipes, and get information about food items. Powered by Gemini.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Admin Dashboard</h2>
+            <div>
+                <span class="me-3">Welcome, {{ admin.name }} ({{ admin.email }})</span>
+                <a href="/toggle_view" class="btn btn-outline-primary btn-sm me-2">Switch to User Chat</a>
+                <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <h4>Orders</h4>
+                <div id="orders-area" class="border rounded p-3 mb-4" style="height: 300px; overflow-y: auto; background: #f8f9fa;">
+                    <div id="orders-loading">Loading orders...</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h4>Product Catalog Columns</h4>
+                <table class="table table-bordered table-sm mb-3">
+                    <thead>
+                        <tr>
+                            <th>Column Name</th>
+                            <th>Type</th>
+                            <th>Delete</th>
+                            <th>Disable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for col in columns %}
+                        <tr>
+                            <td>{{ col[0] }}</td>
+                            <td>{{ col[1] }}</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm" onclick="alert('Delete column: {{ col[0] }} (implement backend)')" {% if col[0] in ['id'] %}disabled{% endif %}>Delete</button>
+                            </td>
+                            <td>
+                                <button class="btn btn-warning btn-sm" onclick="alert('Disable column: {{ col[0] }} (implement backend)')" {% if col[0] in ['id'] %}disabled{% endif %}>Disable</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <h5 class="mt-4">Schema Management</h5>
+                <form id="add-column-form" class="mb-2">
+                    <div class="input-group">
+                        <input type="text" id="new-column-name" class="form-control" placeholder="New column name" required>
+                        <select id="new-column-type" class="form-select" required>
+                            <option value="VARCHAR(100)">Text</option>
+                            <option value="INT">Integer</option>
+                            <option value="DECIMAL(10,2)">Decimal</option>
+                            <option value="TEXT">Long Text</option>
+                        </select>
+                        <button type="submit" class="btn btn-success">Add Column</button>
+                    </div>
+                </form>
+                <div class="alert alert-warning" role="alert">
+                    <strong>Disclaimer:</strong> Uploading a new Excel will <b>delete all existing products</b> and replace them with the new rows.
+                </div>
+                <form id="excel-upload-form" enctype="multipart/form-data" class="mb-3">
+                    <label for="excel-file" class="form-label">Upload Excel (.xlsx):</label>
+                    <input type="file" id="excel-file" name="excel-file" class="form-control mb-2" accept=".xlsx" required>
+                    <button type="submit" class="btn btn-primary">Upload & Replace Products</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Load orders
+        function loadOrders() {
+            fetch('/admin/orders')
+                .then(res => res.json())
+                .then(data => {
+                    const area = document.getElementById('orders-area');
+                    area.innerHTML = '';
+                    if (data.orders && data.orders.length > 0) {
+                        data.orders.forEach(order => {
+                            const div = document.createElement('div');
+                            div.className = 'mb-3 p-2 border rounded bg-white';
+                            div.innerHTML = `<b>Order #${order.id}</b> <span class="text-muted">(${order.placed_at})</span><br>
+                                <b>User:</b> ${order.user_id}<br>
+                                <b>Details:</b> ${order.order_details}`;
+                            area.appendChild(div);
+                        });
+                    } else {
+                        area.innerHTML = '<div class="text-muted">No orders found.</div>';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('orders-area').innerHTML = '<div class="text-danger">Failed to load orders.</div>';
+                });
+        }
+        loadOrders();
+
+        // Excel upload AJAX implementation
+        document.getElementById('excel-upload-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            const fileInput = document.getElementById('excel-file');
+            if (!fileInput.files.length) {
+                alert('Please select a file.');
+                return;
+            }
+            formData.append('excel-file', fileInput.files[0]);
+            fetch('/admin/upload_excel', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Products replaced successfully!');
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (data.error || data.message));
+                }
+            })
+            .catch(err => {
+                alert('Upload failed: ' + err);
+            });
+        });
+        document.getElementById('add-column-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Add column functionality to be implemented.');
+        });
+    </script>
+</body>
+</html>
