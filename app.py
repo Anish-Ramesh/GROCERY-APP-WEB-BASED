@@ -36,12 +36,34 @@ MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
 MYSQL_DB = os.getenv('MYSQL_DB', 'grocery_db')
 
 def get_db_connection():
-    return mysql.connector.connect(
-        host=MYSQL_HOST,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DB
-    )
+    """Create and return a database connection with error handling"""
+    try:
+        conn = mysql.connector.connect(
+            host=os.getenv('MYSQL_HOST'),
+            user=os.getenv('MYSQL_USER'),
+            password=os.getenv('MYSQL_PASSWORD'),
+            database=os.getenv('MYSQL_DB', 'bpo977qofmifrmo5ciff'),
+            port=int(os.getenv('MYSQL_PORT', '3306')),
+            connect_timeout=10,
+            ssl_disabled=True  # Disable SSL if not required by Clever Cloud
+        )
+        print("Successfully connected to the database")
+        return conn
+    except mysql.connector.Error as err:
+        print(f"Error connecting to MySQL: {err}")
+        # If connection fails, try without database name to check if we can connect to server
+        try:
+            conn = mysql.connector.connect(
+                host=os.getenv('MYSQL_HOST'),
+                user=os.getenv('MYSQL_USER'),
+                password=os.getenv('MYSQL_PASSWORD'),
+                port=int(os.getenv('MYSQL_PORT', '3306'))
+            )
+            print("Connected to MySQL server but couldn't connect to the database")
+            conn.close()
+        except Exception as e:
+            print(f"Couldn't even connect to the MySQL server: {e}")
+        raise
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
