@@ -5,50 +5,183 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal Grocery Chatbot</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4e73df;
+            --secondary-color: #1cc88a;
+            --dark-color: #5a5c69;
+        }
+        html, body {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            background-color: #f8f9fc;
+        }
+        .navbar-custom {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #224abe 100%);
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+            padding: 0.75rem 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .navbar-brand {
+            color: white !important;
+            font-weight: 700;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+        .navbar-brand i {
+            margin-right: 10px;
+            font-size: 1.8rem;
+        }
+        .user-greeting {
+            color: white;
+            margin-right: 1rem;
+            font-weight: 500;
+        }
+        .chat-container {
+            background: white;
+            border-radius: 0.35rem;
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.1);
+            padding: 1.5rem;
+            margin-top: 0;
+        }
+        #chat-box {
+            border: 1px solid #e3e6f0;
+            border-radius: 0.35rem;
+            box-shadow: inset 0 0.15rem 0.5rem rgba(0,0,0,0.05);
+        }
+        .btn-custom {
+            background: var(--primary-color);
+            border: none;
+            transition: all 0.3s;
+        }
+        .btn-custom:hover {
+            background: #2e59d9;
+            transform: translateY(-1px);
+        }
+        .app-layout {
+            height: calc(100vh - 72px);
+        }
+        .sidebar {
+            background: #111827;
+            color: #e5e7eb;
+            padding: 1rem;
+            height: 100%;
+        }
+        .sidebar .btn,
+        .sidebar a.btn {
+            text-align: left;
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+        .sidebar-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        .help-panel {
+            position: fixed;
+            right: 1rem;
+            bottom: 1rem;
+            max-width: 360px;
+            z-index: 1050;
+        }
+    </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="mb-0">Welcome, {{ user.name }}!</h2>
-                    <div class="d-flex align-items-center">
-                        <form id="language-form" class="me-2">
-                            <select id="language-select" class="form-select">
-                                {% for lang in supported_languages %}
-                                    <option value="{{ lang.code }}" {% if lang.code == current_language %}selected{% endif %}>{{ lang.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </form>
-                        {% if session.is_admin %}
-                        <a href="/toggle_view" class="btn btn-outline-primary btn-sm">Switch to Admin Dashboard</a>
-                        {% endif %}
+    
+    <div class="container-fluid app-layout">
+        <div class="row w-100">
+            <div class="col-md-3 col-lg-2">
+                <div class="sidebar d-flex flex-column h-100">
+                    <div class="mb-3">
+                        <div class="sidebar-title mb-3 text-center">
+                            <i class="fas fa-shopping-basket me-2"></i> GrodceryBot
+                        </div>
+                        <button id="new-chat-btn" class="btn btn-light btn-sm" type="button">
+                            <i class="fas fa-plus me-2"></i>New chat
+                        </button>
+                    </div>
+                    <div class="flex-grow-1 mb-3">
+                        <div class="text-muted small mb-2">Chats</div>
+                        <div id="chat-sessions-list" class="d-flex flex-column gap-1 small"></div>
+                    </div>
+                    <div class="mt-auto">
+                        <button id="help-toggle" type="button" class="btn btn-outline-light btn-sm mb-2">
+                            <i class="fas fa-question-circle me-1"></i> Help
+                        </button>
+                        <a href="/logout" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-sign-out-alt me-1"></i> Logout
+                        </a>
                     </div>
                 </div>
-                <div id="chat-box" class="border rounded p-3 mb-3" style="height: 350px; overflow-y: auto; background: #f8f9fa;"></div>
-                <form id="chat-form" class="d-flex">
-                    <input type="text" id="chat-input" class="form-control me-2" placeholder="Type your message..." autocomplete="off" required>
-                    <button type="submit" class="btn btn-primary">Send</button>
-                </form>
-                <div class="mt-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="card-title">How to use the Chatbot</h5>
-                            <ul class="mb-2">
-                                <li><b>Show products:</b> <code>product show</code>, <code>show products</code>, <code>list products</code>, <code>display products</code></li>
-                                <li><b>Add to cart:</b> <code>add to cart: product_id=&lt;id&gt;, quantity=&lt;qty&gt;</code></li>
-                                <li><b>Place order:</b> <code>place order</code></li>
-                                <li><b>Ask about products, recipes, or your cart in natural language.</b></li>
-                            </ul>
-                            <b>Examples:</b>
-                            <ul>
-                                <li>To add a product to your cart: <code>add to cart: product_id=2, quantity=3</code></li>
-                                <li>To see available products: <code>product show</code></li>
-                                <li>To place your order: <code>place order</code></li>
-                            </ul>
+            </div>
+            <div class="col-md-9 col-lg-10">
+                <div class="chat-container">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0 text-primary"><i class="fas fa-comment-dots me-2"></i>Chat with GroceryBot</h4>
+                        <div class="d-flex align-items-center">
+                            {% if user.name %}
+                            <span class="me-2 text-muted small d-none d-md-inline">
+                                <i class="fas fa-user-circle me-1"></i> {{ user.name }}
+                            </span>
+                            {% endif %}
+                            <form id="language-form" class="ms-2">
+                                <select id="language-select" class="form-select form-select-sm">
+                                    {% for lang in supported_languages %}
+                                        <option value="{{ lang.code }}" {% if lang.code == current_language %}selected{% endif %}>{{ lang.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </form>
                         </div>
                     </div>
+                    <div id="chat-box" class="p-3 mb-3" style="height: calc(100vh - 240px); overflow-y: auto; background: #f8f9fa;"></div>
+                    <form id="chat-form" class="d-flex">
+                        <input type="text" id="chat-input" class="form-control me-2" placeholder="Type your message..." autocomplete="off" required>
+                        <button type="submit" class="btn btn-primary btn-custom">
+                            <i class="fas fa-paper-plane me-1"></i> Send
+                        </button>
+                    </form>
+                    <div class="mt-2 d-flex">
+                        <select id="command-select" class="form-select me-2">
+                            <option value="">Select a quick command...</option>
+                            <option value="show_products">Show products</option>
+                            <option value="show_cart">Show cart</option>
+                            <option value="add_to_cart">Add to cart</option>
+                            <option value="place_order">Place order</option>
+                            <option value="ask_natural">Ask about products, recipes, or your cart</option>
+                        </select>
+                        <input type="number" id="product-id-input" class="form-control me-2 d-none" placeholder="Product ID">
+                        <input type="number" id="quantity-input" class="form-control me-2 d-none" placeholder="Quantity">
+                        <button type="button" id="command-execute-btn" class="btn btn-secondary btn-custom">
+                            Run
+                        </button>
+                    </div>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div id="help-panel" class="help-panel d-none">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title text-primary mb-0"><i class="fas fa-question-circle me-2"></i>How to use the Chatbot</h5>
+                    <button type="button" id="help-close-btn" class="btn btn-sm btn-outline-secondary">×</button>
+                </div>
+                <ul class="mb-2">
+                    <li><b>Show products:</b> <code>product show</code>, <code>show products</code>, <code>list products</code>, <code>display products</code></li>
+                    <li><b>Add to cart:</b> <code>add to cart: product_id=&lt;id&gt;, quantity=&lt;qty&gt;</code></li>
+                    <li><b>Place order:</b> <code>place order</code></li>
+                    <li><b>Ask about products, recipes, or your cart in natural language.</b></li>
+                </ul>
+                <b>Examples:</b>
+                <ul class="mb-0">
+                    <li>To add a product to your cart: <code>add to cart: product_id=2, quantity=3</code></li>
+                    <li>To see available products: <code>product show</code></li>
+                    <li>To place your order: <code>place order</code></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -58,41 +191,293 @@
         const chatInput = document.getElementById('chat-input');
         const languageForm = document.getElementById('language-form');
         const languageSelect = document.getElementById('language-select');
+        const commandSelect = document.getElementById('command-select');
+        const productIdInput = document.getElementById('product-id-input');
+        const quantityInput = document.getElementById('quantity-input');
+        const commandExecuteBtn = document.getElementById('command-execute-btn');
+        const helpToggle = document.getElementById('help-toggle');
+        const helpPanel = document.getElementById('help-panel');
+        const helpCloseBtn = document.getElementById('help-close-btn');
+        const newChatBtn = document.getElementById('new-chat-btn');
+        const chatSessionsList = document.getElementById('chat-sessions-list');
+        let currentSessionId = null;
+        let chatSessionsCache = [];
 
-        // Load chat history on page load
-        fetch('/api/chat/history')
-            .then(res => res.json())
-            .then(data => {
-                if (data.messages) {
-                    data.messages.forEach(msg => addMessage(msg.role, msg.text));
-                }
+        function renderChatSessions(sessions, activeId) {
+            if (!chatSessionsList) return;
+            chatSessionsList.innerHTML = '';
+            sessions.forEach(s => {
+                const row = document.createElement('div');
+                row.className = 'd-flex align-items-center';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm flex-grow-1 ' + (s.id === activeId ? 'btn-dark' : 'btn-outline-light');
+                btn.textContent = s.title || 'Chat';
+                btn.setAttribute('data-session-id', s.id);
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'btn btn-sm btn-link text-danger ms-1 p-0 delete-session-btn';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.setAttribute('data-session-id', s.id);
+                row.appendChild(btn);
+                row.appendChild(delBtn);
+                chatSessionsList.appendChild(row);
             });
+        }
 
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const message = chatInput.value.trim();
-            if (!message) return;
+        function loadChatHistory() {
+            if (!currentSessionId) return;
+            chatBox.innerHTML = '';
+            fetch('/api/chat/history?session_id=' + encodeURIComponent(currentSessionId))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.messages) {
+                        data.messages.forEach(msg => addMessage(msg.role, msg.text));
+                    }
+                });
+        }
+
+        function loadChatSessions() {
+            fetch('/api/chat/sessions')
+                .then(res => res.json())
+                .then(data => {
+                    chatSessionsCache = data.sessions || [];
+                    currentSessionId = data.active_session_id;
+                    renderChatSessions(chatSessionsCache, currentSessionId);
+                    loadChatHistory();
+                });
+        }
+
+        loadChatSessions();
+
+        function sendChatMessage(message) {
             addMessage('user', message);
-            chatInput.value = '';
             fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ message, session_id: currentSessionId })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.message) {
                     addMessage('assistant', data.message.text);
                 }
+                // Refresh sessions so sidebar titles update after first query
+                loadChatSessions();
             });
+        }
+
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = chatInput.value.trim();
+            if (!message) return;
+            chatInput.value = '';
+            sendChatMessage(message);
         });
+
+        if (commandSelect && commandExecuteBtn) {
+            commandSelect.addEventListener('change', function() {
+                const value = commandSelect.value;
+                const needsProductFields = value === 'add_to_cart';
+                if (productIdInput && quantityInput) {
+                    productIdInput.classList.toggle('d-none', !needsProductFields);
+                    quantityInput.classList.toggle('d-none', !needsProductFields);
+                }
+            });
+
+            commandExecuteBtn.addEventListener('click', function() {
+                const value = commandSelect.value;
+                if (!value) return;
+
+                if (value === 'show_products') {
+                    sendChatMessage('product show');
+                } else if (value === 'show_cart') {
+                    sendChatMessage('cart show');
+                } else if (value === 'add_to_cart') {
+                    const pid = productIdInput.value.trim();
+                    const qty = quantityInput.value.trim() || '1';
+                    if (!pid) {
+                        productIdInput.focus();
+                        return;
+                    }
+                    const message = `add to cart: product_id=${pid}, quantity=${qty}`;
+                    sendChatMessage(message);
+                } else if (value === 'place_order') {
+                    sendChatMessage('place order');
+                } else if (value === 'ask_natural') {
+                    chatInput.focus();
+                    return;
+                }
+            });
+        }
+
+        function parseProducts(text) 
+        {
+            const productPattern = /- ID:\s*(\d+),\s*([^:]+)\(([^)]+)\):\s*([^|]+)\|\s*Price:\s*\$(\d+\.?\d*)\s*\|\s*Stock:\s*(\d+)/g;
+            let match, products = [];
+
+            while ((match = productPattern.exec(text)) !== null) {
+                products.push({
+                    id: match[1],
+                    name: match[2].trim(),       // e.g., "Nestlé Maggi 70g "
+                    category: match[3].trim(),   // e.g., "Snacks"
+                    description: match[4].trim(), // e.g., "Instant noodles pack"
+                    price: match[5],
+                    stock: match[6]
+                });
+            }
+            return products;
+        }
+
+        function createProductTable(products) {
+            const table = document.createElement('table');
+            table.className = 'table table-striped table-bordered mt-2';
+
+            table.innerHTML = `
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Price (₹)</th>
+                        <th>Stock</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${products.map(p => `
+                        <tr>
+                            <td>${p.id}</td>
+                            <td>${p.name}</td>
+                            <td>${p.category}</td>
+                            <td>${p.description}</td>
+                            <td>${p.price}</td>
+                            <td>${p.stock}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-success me-1 add-to-cart-btn" data-product-id="${p.id}">Add to cart</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-from-cart-btn" data-product-id="${p.id}">Remove</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+
+            table.addEventListener('click', function(event) {
+                const addBtn = event.target.closest('.add-to-cart-btn');
+                const removeBtn = event.target.closest('.remove-from-cart-btn');
+
+                if (addBtn) {
+                    const productId = addBtn.getAttribute('data-product-id');
+                    const message = `add to cart: product_id=${productId}, quantity=1`;
+                    sendChatMessage(message);
+                } else if (removeBtn) {
+                    const productId = removeBtn.getAttribute('data-product-id');
+                    const message = `remove from cart: pid=${productId}`;
+                    sendChatMessage(message);
+                }
+            });
+
+            return table;
+        }
 
         function addMessage(role, text) {
             const div = document.createElement('div');
             div.className = 'mb-2';
-            div.innerHTML = `<strong>${role === 'user' ? 'You' : 'Bot'}:</strong> ${text}`;
+
+            // Only render a product table for the "Available products" response
+            if (
+                role === 'assistant' &&
+                text.startsWith('Available products:') &&
+                text.includes('- ID:')
+            ) {
+                const idx = text.indexOf("- ID:");
+                let explanation = '';
+                let productText = text;
+                if (idx > 0) {
+                    explanation = text.slice(0, idx).trim();
+                    productText = text.slice(idx);
+                }
+                const products = parseProducts(productText);
+                let html = '<strong>Bot:</strong>';
+                if (explanation) {
+                    html += ' ' + explanation.replace(/\n/g, '<br>');
+                }
+                div.innerHTML = html;
+                const table = createProductTable(products);
+                div.appendChild(table);
+            } else {
+                div.innerHTML = `<strong>${role === 'user' ? 'You' : 'Bot'}:</strong> ${text}`;
+            }
+
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        if (helpToggle && helpPanel) {
+            const toggleHelp = () => {
+                const hidden = helpPanel.classList.contains('d-none');
+                if (hidden) {
+                    helpPanel.classList.remove('d-none');
+                } else {
+                    helpPanel.classList.add('d-none');
+                }
+            };
+            helpToggle.addEventListener('click', toggleHelp);
+            if (helpCloseBtn) {
+                helpCloseBtn.addEventListener('click', () => {
+                    helpPanel.classList.add('d-none');
+                });
+            }
+        }
+
+        if (newChatBtn) {
+            newChatBtn.addEventListener('click', function() {
+                fetch('/api/chat/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                })
+                .then(res => res.json())
+                .then(data => {
+                    chatSessionsCache = data.sessions || [];
+                    currentSessionId = data.active_session_id;
+                    renderChatSessions(chatSessionsCache, currentSessionId);
+                    chatBox.innerHTML = '';
+                    loadChatHistory();
+                });
+            });
+        }
+
+        if (chatSessionsList) {
+            chatSessionsList.addEventListener('click', function(event) {
+                const deleteBtn = event.target.closest('.delete-session-btn');
+                if (deleteBtn) {
+                    const sessionId = deleteBtn.getAttribute('data-session-id');
+                    if (!sessionId) return;
+                    fetch('/api/chat/sessions/' + encodeURIComponent(sessionId), {
+                        method: 'DELETE'
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        chatSessionsCache = data.sessions || [];
+                        currentSessionId = data.active_session_id;
+                        renderChatSessions(chatSessionsCache, currentSessionId);
+                        chatBox.innerHTML = '';
+                        loadChatHistory();
+                    });
+                    return;
+                }
+
+                const btn = event.target.closest('[data-session-id]');
+                if (!btn) return;
+                const sessionId = btn.getAttribute('data-session-id');
+                if (!sessionId || sessionId === currentSessionId) return;
+                currentSessionId = sessionId;
+                renderChatSessions(chatSessionsCache, currentSessionId);
+                chatBox.innerHTML = '';
+                loadChatHistory();
+            });
         }
 
         // Language selection

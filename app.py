@@ -30,40 +30,99 @@ def serve_static(path):
     return send_from_directory('static', path)
 CORS(app)
 
-MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
-MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
-MYSQL_DB = os.getenv('MYSQL_DB', 'grocery_db')
+MYSQL_HOST = os.getenv('MYSQL_HOST', 'bpo977qofmifrmo5ciff-mysql.services.clever-cloud.com')
+MYSQL_USER = os.getenv('MYSQL_USER', 'uikso7x7mfnszsh0')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'tp2Zws86wsTBZrzVyGrU')
+MYSQL_DB = os.getenv('MYSQL_DB', 'bpo977qofmifrmo5ciff')
 
 def get_db_connection():
     """Create and return a database connection with error handling"""
     try:
         conn = mysql.connector.connect(
-            host=os.getenv('MYSQL_HOST'),
-            user=os.getenv('MYSQL_USER'),
-            password=os.getenv('MYSQL_PASSWORD'),
-            database=os.getenv('MYSQL_DB', 'bpo977qofmifrmo5ciff'),
-            port=int(os.getenv('MYSQL_PORT', '3306')),
-            connect_timeout=10,
-            ssl_disabled=True  # Disable SSL if not required by Clever Cloud
+            host="bpo977qofmifrmo5ciff-mysql.services.clever-cloud.com",
+            user="uikso7x7mfnszsh0",
+            password="tp2Zws86wsTBZrzVyGrU",
+            database="bpo977qofmifrmo5ciff",
+            port=3306,
+            ssl_disabled=True,  # Disable SSL as in a.py
+            connect_timeout=10
         )
-        print("Successfully connected to the database")
-        return conn
+        if conn.is_connected():
+            print("Successfully connected to the database")
+            return conn
+        else:
+            print("Connection failed")
+            return None
     except mysql.connector.Error as err:
-        print(f"Error connecting to MySQL: {err}")
-        # If connection fails, try without database name to check if we can connect to server
-        try:
-            conn = mysql.connector.connect(
-                host=os.getenv('MYSQL_HOST'),
-                user=os.getenv('MYSQL_USER'),
-                password=os.getenv('MYSQL_PASSWORD'),
-                port=int(os.getenv('MYSQL_PORT', '3306'))
+        print(f"❌ MySQL Connection Error: {err}")
+        return None
+
+
+def get_product_answer_from_db(message: str) -> str | None:
+    message_lower = message.lower()
+    patterns = [
+        r"price of ([^?.!,\n]+)",
+        r"cost of ([^?.!,\n]+)",
+        r"details of ([^?.!,\n]+)",
+        r"information about ([^?.!,\n]+)",
+        r"tell me about ([^?.!,\n]+)",
+        r"do you have ([^?.!,\n]+)",
+    ]
+    search_term = None
+    for pattern in patterns:
+        match = re.search(pattern, message_lower, re.IGNORECASE)
+        if match:
+            search_term = match.group(1).strip()
+            break
+    if not search_term:
+        return None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+        cursor = conn.cursor()
+        like_pattern = f"%{search_term}%"
+        cursor.execute(
+            """
+            SELECT id, name, description, category, price, stock
+            FROM product_catalog
+            WHERE is_active = 1
+              AND (LOWER(name) LIKE %s OR LOWER(category) LIKE %s)
+            """,
+            (like_pattern, like_pattern),
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        if not rows:
+            return None
+        response_lines = ["Here is what I found in our product catalog:"]
+        for row in rows:
+            pid, name, description, category, price, stock = row
+            response_lines.append(
+                f"- ID: {pid}, {name} ({category}): {description} | Price: ${price:.2f} | Stock: {stock}"
             )
-            print("Connected to MySQL server but couldn't connect to the database")
-            conn.close()
-        except Exception as e:
-            print(f"Couldn't even connect to the MySQL server: {e}")
-        raise
+        return "\n".join(response_lines)
+    except Exception as e:
+        print(f"Error in get_product_answer_from_db: {e}")
+        return None
+
+
+def is_product_question(message: str) -> bool:
+    message_lower = message.lower()
+    patterns = [
+        r"price of ([^?.!,\n]+)",
+        r"cost of ([^?.!,\n]+)",
+        r"details of ([^?.!,\n]+)",
+        r"information about ([^?.!,\n]+)",
+        r"tell me about ([^?.!,\n]+)",
+        r"do you have ([^?.!,\n]+)",
+    ]
+    for pattern in patterns:
+        if re.search(pattern, message_lower, re.IGNORECASE):
+            return True
+    return False
+
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
@@ -114,6 +173,7 @@ except Exception as e:
     print("Using simple response system")
 
 # In-memory storage for chat sessions
+# Structure: { user_id: { 'active_session_id': str, 'sessions': {session_id: ChatSession} } }
 chat_sessions = {}
 
 # Supported languages
@@ -160,13 +220,19 @@ SUPPORTED_LANGUAGES = [
 ]
 
 class ChatSession:
-    def __init__(self, user_id):
+    def __init__(self, user_id, session_id=None, title=None):
         self.user_id = user_id
+        self.session_id = session_id or str(datetime.now().timestamp()).replace('.', '')
+        self.title = title or "New chat"
+        now_iso = datetime.now().isoformat()
+        self.created_at = now_iso
+        self.updated_at = now_iso
         self.messages = [
             {
+                'id': '1',
                 'role': 'assistant',
                 'text': 'Hello! How can I help you with your grocery shopping today?',
-                'timestamp': datetime.now().isoformat()
+                'timestamp': now_iso
             }
         ]
         self.cart = []
@@ -175,18 +241,19 @@ class ChatSession:
         
         try:
             self.chat = model.start_chat(history=[])
-            print(f"Created new chat session for user {user_id}")
+            print(f"Created new chat session for user {user_id} with session_id={self.session_id}")
         except Exception as e:
             print(f"Error initializing chat model: {str(e)}")
             self.chat = None
 
-        self.chat.send_message(
-            "You are a helpful grocery shopping assistant. "
-            "Help users find products, manage their shopping cart, "
-            "and answer questions about groceries. Be friendly and concise. "
-            "When showing product prices, format them in a clear way. "
-            "When adding items to cart, confirm the action and update the cart total."
-        )
+        if hasattr(self, 'chat') and self.chat is not None:
+            self.chat.send_message(
+                "You are a helpful grocery shopping assistant. "
+                "Help users find products, manage their shopping cart, "
+                "and answer questions about groceries. Be friendly and concise. "
+                "When showing product prices, format them in a clear way. "
+                "When adding items to cart, confirm the action and update the cart total."
+            )
 
     def add_message(self, role, text):
         message = {
@@ -196,6 +263,7 @@ class ChatSession:
             'timestamp': datetime.now().isoformat()
         }
         self.messages.append(message)
+        self.updated_at = message['timestamp']
         return message
 
     async def get_ai_response(self, user_input):
@@ -211,6 +279,113 @@ class ChatSession:
             print(f"Error getting AI response: {str(e)}")
             error_message = f"Sorry, I encountered an error: {str(e)[:100]}"
             return self.add_message('model', error_message)
+
+def load_chat_sessions_from_db(user_id):
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return []
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT session_id, title, created_at, updated_at
+            FROM chat_sessions
+            WHERE user_id = %s
+            ORDER BY updated_at DESC
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"Error loading chat sessions from DB: {e}")
+        return []
+
+
+def save_chat_session_to_db(session: ChatSession):
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO chat_sessions (session_id, user_id, title, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                title = VALUES(title),
+                updated_at = VALUES(updated_at)
+            """,
+            (
+                session.session_id,
+                session.user_id,
+                session.title,
+                session.created_at,
+                session.updated_at,
+            ),
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error saving chat session to DB: {e}")
+
+
+def get_or_create_user_sessions(user_id):
+    if user_id not in chat_sessions:
+        user_data = {
+            'active_session_id': None,
+            'sessions': {},
+        }
+        rows = load_chat_sessions_from_db(user_id)
+        if rows:
+            for row in rows:
+                session_id, title, created_at, updated_at = row
+                s = ChatSession(user_id, session_id=session_id, title=title)
+                # Preserve original timestamps for display/order
+                try:
+                    s.created_at = created_at.isoformat()
+                except AttributeError:
+                    s.created_at = str(created_at)
+                try:
+                    s.updated_at = updated_at.isoformat()
+                except AttributeError:
+                    s.updated_at = str(updated_at)
+                user_data['sessions'][s.session_id] = s
+            user_data['active_session_id'] = rows[0][0]
+        else:
+            first_session = ChatSession(user_id)
+            save_chat_session_to_db(first_session)
+            user_data['active_session_id'] = first_session.session_id
+            user_data['sessions'][first_session.session_id] = first_session
+        chat_sessions[user_id] = user_data
+    return chat_sessions[user_id]
+
+def get_active_chat_session(user_id):
+    user_data = get_or_create_user_sessions(user_id)
+    active_id = user_data.get('active_session_id')
+    session = user_data['sessions'].get(active_id)
+    if not session:
+        session = ChatSession(user_id)
+        user_data['sessions'][session.session_id] = session
+        user_data['active_session_id'] = session.session_id
+    return session
+
+def create_new_chat_session(user_id, title=None):
+    user_data = chat_sessions.get(user_id)
+    new_session = ChatSession(user_id, title=title or "New chat")
+    if not user_data:
+        chat_sessions[user_id] = {
+            'active_session_id': new_session.session_id,
+            'sessions': {new_session.session_id: new_session}
+        }
+    else:
+        user_data['sessions'][new_session.session_id] = new_session
+        user_data['active_session_id'] = new_session.session_id
+    save_chat_session_to_db(new_session)
+    return new_session
 
 @app.route('/')
 def index():
@@ -304,7 +479,7 @@ def google_auth_callback():
         session['is_admin'] = userinfo.get('email') in ADMIN_EMAILS
     
         if userinfo['sub'] not in chat_sessions:
-            chat_sessions[userinfo['sub']] = ChatSession(userinfo['sub'])
+            get_or_create_user_sessions(userinfo['sub'])
         return redirect(url_for('index'))
     except Exception as e:
         return f"Error during authentication: {str(e)}", 500
@@ -327,10 +502,14 @@ def chat():
         return jsonify({'error': 'No message provided'}), 400
     
     user_id = session['user']['id']
-    if user_id not in chat_sessions:
-        chat_sessions[user_id] = ChatSession(user_id)
-    
-    chat_session = chat_sessions[user_id]
+    session_id = data.get('session_id')
+    user_data = get_or_create_user_sessions(user_id)
+
+    if session_id and session_id in user_data['sessions']:
+        user_data['active_session_id'] = session_id
+        chat_session = user_data['sessions'][session_id]
+    else:
+        chat_session = get_active_chat_session(user_id)
     
     try:
         user_message = {
@@ -339,6 +518,18 @@ def chat():
             'timestamp': datetime.now().isoformat()
         }
         chat_session.messages.append(user_message)
+
+        # Auto-name new chats based on the first user query
+        if not chat_session.title or chat_session.title == "New chat":
+            raw_title = message.strip().replace('\n', ' ')
+            if raw_title:
+                if len(raw_title) > 40:
+                    raw_title = raw_title[:40].rstrip() + "..."
+                chat_session.title = raw_title
+                try:
+                    save_chat_session_to_db(chat_session)
+                except Exception as e:
+                    print(f"Error saving updated chat title: {e}")
 
         current_language = session.get('current_language', 'en')
 
@@ -384,9 +575,40 @@ def chat():
                     response_text = "No products available."
             except Exception as db_err:
                 response_text = f"Failed to fetch products: {db_err}"
+
+        elif re.search(r"\b(cart show|show cart|view cart)\b", message, re.IGNORECASE):
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT c.product_id, c.quantity, p.name, p.price
+                    FROM cart c
+                    LEFT JOIN product_catalog p ON c.product_id = p.id
+                    WHERE c.user_id = %s
+                    """,
+                    (user_id,),
+                )
+                rows = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                if not rows:
+                    response_text = "Your cart is currently empty."
+                else:
+                    response_lines = ["Your cart items:"]
+                    for pid, qty, name, price in rows:
+                        label = name or f"Product {pid}"
+                        line = f"- {label} (ID: {pid}) x {qty}"
+                        if price is not None:
+                            line += f" | Price each: ${price:.2f}"
+                        response_lines.append(line)
+                    response_text = "\n".join(response_lines)
+            except Exception as db_err:
+                response_text = f"Failed to fetch cart items: {db_err}"
+
         # Add to cart intent
-        elif re.search(r"add to cart\s*:\s*pid=(\d+),\s*q=(\d+)", message, re.IGNORECASE):
-            cart_match = re.search(r"add to cart\s*:\s*pid=(\d+),\s*q=(\d+)", message, re.IGNORECASE)
+        elif re.search(r"add to cart\s*:\s*(?:pid|product_id)=(\d+),\s*(?:q|quantity)=(\d+)", message, re.IGNORECASE):
+            cart_match = re.search(r"add to cart\s*:\s*(?:pid|product_id)=(\d+),\s*(?:q|quantity)=(\d+)", message, re.IGNORECASE)
             product_id = int(cart_match.group(1))
             quantity = int(cart_match.group(2))
             try:
@@ -402,6 +624,26 @@ def chat():
                 response_text = f"Added product {product_id} (qty: {quantity}) to your cart."
             except Exception as db_err:
                 response_text = f"Failed to add to cart: {db_err}"
+
+        elif re.search(r"remove from cart\s*:\s*pid=(\d+)", message, re.IGNORECASE):
+            remove_match = re.search(r"remove from cart\s*:\s*pid=(\d+)", message, re.IGNORECASE)
+            product_id = int(remove_match.group(1))
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM cart WHERE user_id=%s AND product_id=%s LIMIT 1",
+                    (user_id, product_id)
+                )
+                if cursor.rowcount == 0:
+                    response_text = f"Product {product_id} was not found in your cart."
+                else:
+                    conn.commit()
+                    response_text = f"Removed product {product_id} from your cart."
+                cursor.close()
+                conn.close()
+            except Exception as db_err:
+                response_text = f"Failed to remove from cart: {db_err}"
         
         elif re.search(r"place order", message, re.IGNORECASE):
             try:
@@ -437,11 +679,36 @@ def chat():
                 response_text = f"Failed to place order: {db_err}"
         else:
             response_text = ""
+            product_answer = None
             try:
-                response = chat_session.chat.send_message(message)
-                response_text = response.text if hasattr(response, 'text') else "I didn't get a proper response."
-            except Exception as e:
-                response_text = "I'm having trouble connecting to the AI service right now. Please try again later."
+                product_answer = get_product_answer_from_db(message)
+            except Exception as db_lookup_err:
+                print(f"Error during product DB lookup: {db_lookup_err}")
+            if product_answer:
+                try:
+                    if chat_session.chat is not None:
+                        prompt = (
+                            "The user asked: '" + message + "'. "
+                            "Based on the following product data from our internal database, "
+                            "answer the user's question in a short, natural way, then keep the data below for reference.\n\n"
+                            + product_answer
+                        )
+                        response = chat_session.chat.send_message(prompt)
+                        nlp_text = response.text if hasattr(response, 'text') else ""
+                        response_text = (nlp_text + "\n\n" + product_answer).strip()
+                    else:
+                        response_text = product_answer
+                except Exception as e:
+                    print(f"Error getting NLP answer from model: {e}")
+                    response_text = product_answer
+            else:
+                try:
+                    response = chat_session.chat.send_message(message)
+                    response_text = response.text if hasattr(response, 'text') else "I didn't get a proper response."
+                    if is_product_question(message):
+                        response_text += "\n\nNote: I couldn't find this product in our store database, so this answer is general information and may not match our current catalog."
+                except Exception as e:
+                    response_text = "I'm having trouble connecting to the AI service right now. Please try again later."
 
         if current_language != 'en' and translator:
             try:
@@ -456,6 +723,10 @@ def chat():
             'timestamp': datetime.now().isoformat()
         }
         chat_session.messages.append(bot_message)
+        try:
+            save_chat_session_to_db(chat_session)
+        except Exception as e:
+            print(f"Error persisting chat session metadata: {e}")
         print(f"Added bot response to history. Total messages: {len(chat_session.messages)}")
 
         if len(chat_session.messages) > 20:
@@ -484,10 +755,119 @@ def get_chat_history():
         return jsonify({'error': 'Not authenticated'}), 401
     
     user_id = session['user']['id']
-    if user_id not in chat_sessions:
-        return jsonify({'messages': []})
-    
-    return jsonify({'messages': chat_sessions[user_id].messages})
+    session_id = request.args.get('session_id')
+    user_data = chat_sessions.get(user_id)
+    if not user_data:
+        session_obj = get_active_chat_session(user_id)
+        return jsonify({'messages': session_obj.messages})
+
+    if session_id and session_id in user_data['sessions']:
+        session_obj = user_data['sessions'][session_id]
+    else:
+        session_obj = get_active_chat_session(user_id)
+
+    return jsonify({'messages': session_obj.messages})
+
+
+@app.route('/api/chat/sessions', methods=['GET'])
+def list_chat_sessions():
+    if 'user' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    user_id = session['user']['id']
+    user_data = get_or_create_user_sessions(user_id)
+    sessions_payload = []
+    for sid, s in user_data['sessions'].items():
+        sessions_payload.append({
+            'id': sid,
+            'title': s.title,
+            'created_at': s.created_at,
+            'updated_at': s.updated_at,
+        })
+    return jsonify({
+        'sessions': sessions_payload,
+        'active_session_id': user_data['active_session_id'],
+    })
+
+
+@app.route('/api/chat/sessions', methods=['POST'])
+def create_chat_session():
+    if 'user' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    user_id = session['user']['id']
+    data = request.get_json(silent=True) or {}
+    title = data.get('title') or "New chat"
+    new_session = create_new_chat_session(user_id, title=title)
+    user_data = chat_sessions[user_id]
+    sessions_payload = []
+    for sid, s in user_data['sessions'].items():
+        sessions_payload.append({
+            'id': sid,
+            'title': s.title,
+            'created_at': s.created_at,
+            'updated_at': s.updated_at,
+        })
+    return jsonify({
+        'id': new_session.session_id,
+        'title': new_session.title,
+        'sessions': sessions_payload,
+        'active_session_id': user_data['active_session_id'],
+    })
+
+
+@app.route('/api/chat/sessions/<session_id>', methods=['DELETE'])
+def delete_chat_session(session_id):
+    if 'user' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    user_id = session['user']['id']
+    user_data = get_or_create_user_sessions(user_id)
+
+    if session_id not in user_data['sessions']:
+        return jsonify({'error': 'Session not found'}), 404
+
+    # Remove from DB
+    try:
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM chat_sessions WHERE user_id = %s AND session_id = %s",
+                (user_id, session_id),
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+    except Exception as e:
+        print(f"Error deleting chat session from DB: {e}")
+
+    # Remove from in-memory cache
+    user_data['sessions'].pop(session_id, None)
+
+    # Choose a new active session if needed
+    if user_data['active_session_id'] == session_id:
+        remaining_ids = list(user_data['sessions'].keys())
+        if remaining_ids:
+            user_data['active_session_id'] = remaining_ids[0]
+        else:
+            new_session = create_new_chat_session(user_id)
+            user_data = chat_sessions[user_id]
+
+    # Build payload
+    sessions_payload = []
+    for sid, s in user_data['sessions'].items():
+        sessions_payload.append({
+            'id': sid,
+            'title': s.title,
+            'created_at': s.created_at,
+            'updated_at': s.updated_at,
+        })
+
+    return jsonify({
+        'sessions': sessions_payload,
+        'active_session_id': user_data['active_session_id'],
+    })
 
 @app.route('/api/language', methods=['POST'])
 def set_language():
