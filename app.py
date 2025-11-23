@@ -8,12 +8,8 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import mysql.connector
 import re
-try:
-    from googletrans import Translator
-    translator = Translator()
-except ImportError:
-    translator = None
-import pandas as pd
+import csv
+import io
 from werkzeug.utils import secure_filename
 
 load_dotenv()
@@ -710,12 +706,13 @@ def chat():
                 except Exception as e:
                     response_text = "I'm having trouble connecting to the AI service right now. Please try again later."
 
-        if current_language != 'en' and translator:
-            try:
-                translated = translator.translate(response_text, dest=current_language)
-                response_text = translated.text
-            except Exception as trans_err:
-                response_text += f"\n(Translation error: {trans_err})"
+        # Translation logic disabled (googletrans removed to reduce bundle size)
+        # if current_language != 'en' and translator:
+        #     try:
+        #         translated = translator.translate(response_text, dest=current_language)
+        #         response_text = translated.text
+        #     except Exception as trans_err:
+        #         response_text += f"\n(Translation error: {trans_err})"
 
         bot_message = {
             'role': 'assistant',
@@ -891,20 +888,30 @@ def admin_upload_excel():
         return jsonify({'error': 'No file uploaded'}), 400
     file = request.files['excel-file']
     filename = secure_filename(file.filename)
-    if not filename.endswith('.add to cart: product_id=2, quantity=3'):
-        return jsonify({'error': 'Only .xlsx files are supported'}), 400
+    if not filename.lower().endswith('.csv'):
+        return jsonify({'error': 'Only .csv files are supported'}), 400
     try:
-        df = pd.read_excel(file)
+        content = file.stream.read().decode('utf-8')
+        csv_file = io.StringIO(content)
+        reader = csv.DictReader(csv_file)
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SHOW COLUMNS FROM product_catalog")
         db_columns = [col[0] for col in cursor.fetchall()]
-        df = df[[col for col in df.columns if col in db_columns]]
+
         cursor.execute("DELETE FROM product_catalog")
-        for _, row in df.iterrows():
-            placeholders = ','.join(['%s'] * len(row))
-            sql = f"INSERT INTO product_catalog ({','.join(row.index)}) VALUES ({placeholders})"
-            cursor.execute(sql, tuple(row))
+
+        for row in reader:
+            filtered = {k: v for k, v in row.items() if k in db_columns}
+            if not filtered:
+                continue
+            columns = list(filtered.keys())
+            values = [filtered[c] for c in columns]
+            placeholders = ','.join(['%s'] * len(columns))
+            sql = f"INSERT INTO product_catalog ({','.join(columns)}) VALUES ({placeholders})"
+            cursor.execute(sql, values)
+
         conn.commit()
         cursor.close()
         conn.close()
