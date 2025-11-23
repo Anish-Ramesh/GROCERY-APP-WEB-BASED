@@ -123,6 +123,7 @@ def is_product_question(message: str) -> bool:
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+APP_BASE_URL = os.getenv('APP_BASE_URL', 'http://localhost:5000')
 
 ADMIN_EMAILS = set(os.getenv('ADMIN_EMAILS', '').split(',')) if os.getenv('ADMIN_EMAILS') else {"admin@example.com"}
 
@@ -428,7 +429,7 @@ def google_auth():
         f"client_id={GOOGLE_CLIENT_ID}&"
         "response_type=code&"
         "scope=openid%20email%20profile&"
-        f"redirect_uri=http://localhost:5000/auth/google/callback&"
+        f"redirect_uri={APP_BASE_URL}/auth/google/callback&"
         "access_type=offline"
     )
     return redirect(auth_url)
@@ -445,7 +446,7 @@ def google_auth_callback():
             'code': code,
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET,
-            'redirect_uri': 'http://localhost:5000/auth/google/callback',
+            'redirect_uri': f'{APP_BASE_URL}/auth/google/callback',
             'grant_type': 'authorization_code',
         }
         token_response = requests.post(
