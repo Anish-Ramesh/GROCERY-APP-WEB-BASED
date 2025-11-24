@@ -429,7 +429,7 @@ def google_auth():
         f"client_id={GOOGLE_CLIENT_ID}&"
         "response_type=code&"
         "scope=openid%20email%20profile&"
-        f"redirect_uri={APP_BASE_URL}/auth/google/callback&"
+        f"redirect_uri=https://grocery-app-web-based.vercel.app/auth/google/callback&"
         "access_type=offline"
     )
     return redirect(auth_url)
@@ -446,7 +446,7 @@ def google_auth_callback():
             'code': code,
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET,
-            'redirect_uri': f'{APP_BASE_URL}/auth/google/callback',
+            'redirect_uri': 'https://grocery-app-web-based.vercel.app/auth/google/callback',
             'grant_type': 'authorization_code',
         }
         token_response = requests.post(
